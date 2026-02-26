@@ -13,7 +13,7 @@ using Debug = UnityEngine.Debug;
 
 public partial class GenerateInteractionsWindow
 {
-    /// Exports selected objects to JSON, renders views, builds a scene prefab, and kicks off Python generator
+    /// Exports selected objects to JSON, renders views, and builds a scene prefab.
     
     private void CreateInteractionObjects()
     {
@@ -110,8 +110,6 @@ public partial class GenerateInteractionsWindow
 
         AssetDatabase.Refresh();
 
-        RunPythonGenerator(jsonPath);
-
         Debug.Log($"Created JSON export: {jsonPath}. Rendered {renderResult.imageCount} images to {renderResult.viewsPath} and manifest: {manifestPath}.");
     }
 
@@ -163,6 +161,47 @@ public partial class GenerateInteractionsWindow
         if (string.IsNullOrEmpty(name)) return "Object";
         string sanitized = SafeNameRegex.Replace(name, "_");
         return string.IsNullOrEmpty(sanitized) ? "Object" : sanitized;
+    }
+
+    private static List<GameObject> GetTopLevelOnly(List<GameObject> selected)
+    {
+        var result = new List<GameObject>();
+        var selectedSet = new HashSet<Transform>();
+        foreach (GameObject go in selected)
+        {
+            if (go != null)
+            {
+                selectedSet.Add(go.transform);
+            }
+        }
+
+        foreach (GameObject go in selected)
+        {
+            if (go == null)
+            {
+                continue;
+            }
+
+            bool hasSelectedAncestor = false;
+            Transform current = go.transform.parent;
+            while (current != null)
+            {
+                if (selectedSet.Contains(current))
+                {
+                    hasSelectedAncestor = true;
+                    break;
+                }
+
+                current = current.parent;
+            }
+
+            if (!hasSelectedAncestor)
+            {
+                result.Add(go);
+            }
+        }
+
+        return result;
     }
 
     private SceneExport BuildSceneExport(List<GameObject> topLevel)
