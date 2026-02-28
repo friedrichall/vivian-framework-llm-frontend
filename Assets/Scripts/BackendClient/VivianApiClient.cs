@@ -107,6 +107,28 @@ namespace Vivian.Backend.Client
             return SendJsonAsync<JobResultResponse>(HttpMethod.Get, "/jobs/" + EscapePath(jobId) + "/result", null, cancellationToken);
         }
 
+        public Task<SceneReviewResponse> GetSceneReviewAsync(string jobId, CancellationToken cancellationToken = default)
+        {
+            return SendJsonAsync<SceneReviewResponse>(HttpMethod.Get, "/jobs/" + EscapePath(jobId) + "/scene-review", null, cancellationToken);
+        }
+
+        public Task<SceneReviewDecisionResponse> SubmitSceneReviewDecisionAsync(
+            string jobId,
+            SceneReviewDecisionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (request == null)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            return SendJsonAsync<SceneReviewDecisionResponse>(
+                HttpMethod.Post,
+                "/jobs/" + EscapePath(jobId) + "/scene-review",
+                request,
+                cancellationToken);
+        }
+
         public Task<string> GetJobResultRawJsonAsync(string jobId, CancellationToken cancellationToken = default)
         {
             return SendRawAsync(HttpMethod.Get, "/jobs/" + EscapePath(jobId) + "/result", null, cancellationToken);

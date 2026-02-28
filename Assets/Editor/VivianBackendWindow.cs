@@ -1,7 +1,6 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEditor;
@@ -21,6 +20,7 @@ public sealed class VivianBackendWindow : EditorWindow
 
     private const double StatusPollIntervalSeconds = 0.5;
     private const double LogsPollIntervalSeconds = 0.75d;
+    private const double SceneReviewPollIntervalSeconds = 1d;
 
     private VivianApiClient _apiClient;
     private VivianJobService _jobService;
@@ -57,8 +57,15 @@ public sealed class VivianBackendWindow : EditorWindow
     private Vector2 _chatScroll;
     private string _userChatInput = string.Empty;
     private string _sceneSummaryText = string.Empty;
-    private string _sceneFeedbackText = string.Empty;
-    private DateTime _sceneSummaryLastWrite = DateTime.MinValue;
+    private SceneReviewState? _sceneReviewState;
+    private bool _hasSceneReviewPayload;
+    private int _sceneReviewRevision;
+    private bool _hasSceneReviewRevision;
+    private DateTimeOffset? _sceneReviewUpdatedAt;
+    private bool _sceneDecisionLocked;
+    private int _sceneDecisionAcceptedRevision;
+    private bool _sceneConfirmedForCurrentJob;
+    private string _sceneReviewMessage = string.Empty;
 
     private string _statusMessage = "Idle";
     private string _lastError = string.Empty;
@@ -77,6 +84,8 @@ public sealed class VivianBackendWindow : EditorWindow
     private bool _isPolling;
     private bool _isStatusPollInFlight;
     private bool _isLogsPollInFlight;
+    private bool _isSceneReviewPollInFlight;
+    private bool _isSceneDecisionInFlight;
     private bool _isStartingJob;
     private bool _isCancellingJob;
     private bool _isTestingConnectivity;
@@ -85,6 +94,7 @@ public sealed class VivianBackendWindow : EditorWindow
 
     private double _nextStatusPollAt;
     private double _nextLogsPollAt;
+    private double _nextSceneReviewPollAt;
 
     [MenuItem("Vivian/Backend Job Window")]
     private static void ShowWindow()
@@ -339,18 +349,56 @@ public sealed class VivianBackendWindow : EditorWindow
     }
 
     /// <summary>
-    /// Shows generated scene summary text and writes user feedback for the backend.
+    /// Renders scene review state from backend API payloads and submits revision-bound decisions.
     /// </summary>
     private void DrawSceneConfirmationSection()
     {
         EditorGUILayout.LabelField("Scene Confirmation Chat", EditorStyles.boldLabel);
-        UpdateSceneSummaryIfNeeded();
-        string summaryText = string.IsNullOrEmpty(_sceneSummaryText) ? "(no summary yet)" : _sceneSummaryText;
-        string summaryPath = GetSceneSummaryPath();
-        bool canSendFeedback = !string.IsNullOrEmpty(_groupPath) && Directory.Exists(_groupPath);
 
-        EditorGUILayout.LabelField("Summary file:", string.IsNullOrEmpty(summaryPath) ? "(not available)" : summaryPath);
+        JobStatusResponse status = _jobService != null ? _jobService.LastKnownStatus : null;
+        bool hasJob = _jobService != null && _jobService.HasJob;
+        bool isAwaitingSceneConfirmation = status != null && status.Phase == JobPhase.AWAITING_SCENE_CONFIRMATION;
+        bool isPendingReview = isAwaitingSceneConfirmation &&
+                               _sceneReviewState == SceneReviewState.PENDING &&
+                               _hasSceneReviewPayload;
+        bool isProcessingFeedback = isAwaitingSceneConfirmation &&
+                                    _sceneReviewState == SceneReviewState.PROCESSING_FEEDBACK;
 
+        if (_hasSceneReviewRevision)
+        {
+            EditorGUILayout.LabelField("Revision", _sceneReviewRevision.ToString());
+        }
+        if (_sceneReviewUpdatedAt.HasValue)
+        {
+            EditorGUILayout.LabelField("Updated", _sceneReviewUpdatedAt.Value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_sceneReviewMessage))
+        {
+            EditorGUILayout.HelpBox(_sceneReviewMessage, MessageType.Info);
+        }
+
+        if (!hasJob)
+        {
+            EditorGUILayout.HelpBox("Start a run first. Scene review appears automatically when the backend requests confirmation.", MessageType.Info);
+            return;
+        }
+
+        if (isProcessingFeedback)
+        {
+            EditorGUILayout.HelpBox("Applying feedback...", MessageType.Info);
+            return;
+        }
+        else if (!isPendingReview)
+        {
+            string waitingMessage = isAwaitingSceneConfirmation
+                ? "Waiting for pending scene review payload..."
+                : "Scene review UI is shown only while the backend is awaiting scene confirmation.";
+            EditorGUILayout.HelpBox(waitingMessage, MessageType.None);
+            return;
+        }
+
+        string summaryText = string.IsNullOrWhiteSpace(_sceneSummaryText) ? "(empty summary)" : _sceneSummaryText;
         var bubbleStyle = new GUIStyle(EditorStyles.helpBox)
         {
             wordWrap = true,
@@ -383,39 +431,45 @@ public sealed class VivianBackendWindow : EditorWindow
         }
         EditorGUILayout.EndScrollView();
 
+        bool disableActions = _isSceneDecisionInFlight || _sceneDecisionLocked || _sceneConfirmedForCurrentJob;
+
         EditorGUILayout.BeginHorizontal();
         _userChatInput = EditorGUILayout.TextField(_userChatInput, GUILayout.ExpandWidth(true));
-        EditorGUI.BeginDisabledGroup(!canSendFeedback);
-        if (GUILayout.Button("Send", GUILayout.Width(80)))
+        EditorGUI.BeginDisabledGroup(disableActions);
+        if (GUILayout.Button(_isSceneDecisionInFlight ? "Sending..." : "Send Feedback", GUILayout.Width(120)))
         {
-            string trimmed = _userChatInput == null ? string.Empty : _userChatInput.Trim();
-            if (!string.IsNullOrEmpty(trimmed))
+            string feedback = _userChatInput == null ? string.Empty : _userChatInput.Trim();
+            if (string.IsNullOrWhiteSpace(feedback))
             {
-                OnUserMessageSubmitted(trimmed);
-                _sceneFeedbackText = trimmed;
-                WriteSceneFeedback(false);
-            }
-        }
-        if (GUILayout.Button("Confirm Scene Analysis", GUILayout.Width(170)))
-        {
-            string trimmed = _userChatInput == null ? string.Empty : _userChatInput.Trim();
-            if (!string.IsNullOrEmpty(trimmed))
-            {
-                OnUserMessageSubmitted(trimmed);
-                _sceneFeedbackText = trimmed;
+                _sceneReviewMessage = "Feedback text is required when sending corrections.";
             }
             else
             {
-                _sceneFeedbackText = string.Empty;
+                OnUserMessageSubmitted(feedback);
+                _ = SubmitSceneReviewDecisionAsync(confirmed: false, feedback);
             }
-            WriteSceneFeedback(true);
+        }
+
+        if (GUILayout.Button("Confirm", GUILayout.Width(90)))
+        {
+            string feedback = _userChatInput == null ? string.Empty : _userChatInput.Trim();
+            if (!string.IsNullOrWhiteSpace(feedback))
+            {
+                OnUserMessageSubmitted(feedback);
+            }
+
+            _ = SubmitSceneReviewDecisionAsync(confirmed: true, feedback);
         }
         EditorGUI.EndDisabledGroup();
         EditorGUILayout.EndHorizontal();
 
-        if (!canSendFeedback)
+        if (_sceneDecisionLocked && !_sceneConfirmedForCurrentJob)
         {
-            EditorGUILayout.HelpBox("Start a run first to generate the scene folder for summary and feedback files.", MessageType.Info);
+            EditorGUILayout.HelpBox("Feedback accepted. Waiting for next pending revision before enabling actions.", MessageType.Info);
+        }
+        if (_sceneConfirmedForCurrentJob)
+        {
+            EditorGUILayout.HelpBox("Scene confirmation submitted. Waiting for backend pipeline to continue.", MessageType.Info);
         }
     }
 
@@ -429,11 +483,13 @@ public sealed class VivianBackendWindow : EditorWindow
         JobStatusResponse status = _jobService.LastKnownStatus;
         string jobId = _jobService.HasJob ? _jobService.CurrentJobId : "-";
         string state = status != null ? status.Status.ToString() : "Idle";
+        string phase = status != null ? status.Phase.ToString() : "-";
         string progress = GetProgressText(status);
         string message = GetStatusMessage(status);
 
         EditorGUILayout.LabelField("Job ID", jobId);
         EditorGUILayout.LabelField("State", state);
+        EditorGUILayout.LabelField("Phase", phase);
         EditorGUILayout.LabelField("Progress", progress);
         EditorGUILayout.LabelField("Message", message);
 
@@ -620,7 +676,15 @@ public sealed class VivianBackendWindow : EditorWindow
             CancelJobResponse cancelResponse = await _jobService.CancelJobAsync();
             _cancelMessage = cancelResponse.Message;
             _statusMessage = "Cancel requested.";
-            StartPolling();
+            if (cancelResponse.Status == JobStatus.CANCELLED)
+            {
+                CloseSceneReviewUi();
+                StopPolling();
+            }
+            else
+            {
+                StartPolling();
+            }
         }
         catch (Exception ex)
         {
@@ -640,6 +704,7 @@ public sealed class VivianBackendWindow : EditorWindow
     {
         StopPolling();
         _jobService?.Reset();
+        ResetSceneConfirmationForNewGeneration();
 
         _statusMessage = "Idle";
         _lastError = string.Empty;
@@ -761,6 +826,7 @@ public sealed class VivianBackendWindow : EditorWindow
         _isPolling = true;
         _nextStatusPollAt = 0d;
         _nextLogsPollAt = 0d;
+        _nextSceneReviewPollAt = 0d;
         EditorApplication.update += OnEditorUpdate;
     }
 
@@ -775,6 +841,9 @@ public sealed class VivianBackendWindow : EditorWindow
         }
 
         _isPolling = false;
+        _isStatusPollInFlight = false;
+        _isLogsPollInFlight = false;
+        _isSceneReviewPollInFlight = false;
         EditorApplication.update -= OnEditorUpdate;
     }
 
@@ -815,6 +884,12 @@ public sealed class VivianBackendWindow : EditorWindow
             _nextLogsPollAt = now + LogsPollIntervalSeconds;
             _ = PollLogsAsync();
         }
+
+        if (now >= _nextSceneReviewPollAt && !_isSceneReviewPollInFlight)
+        {
+            _nextSceneReviewPollAt = now + SceneReviewPollIntervalSeconds;
+            _ = PollSceneReviewAsync();
+        }
     }
 
     /// <summary>
@@ -832,10 +907,15 @@ public sealed class VivianBackendWindow : EditorWindow
         try
         {
             JobStatusResponse status = await _jobService.PollStatusAsync();
-            _statusMessage = "Job state: " + status.Status;
+            _statusMessage = GetPhaseDisplayText(status.Phase, _sceneReviewState);
 
             if (VivianJobService.IsTerminalStatus(status.Status))
             {
+                if (status.Status == JobStatus.CANCELLED)
+                {
+                    CloseSceneReviewUi();
+                }
+
                 if (status.Status == JobStatus.SUCCEEDED)
                 {
                     await FetchResultOnceAsync();
@@ -878,6 +958,91 @@ public sealed class VivianBackendWindow : EditorWindow
         finally
         {
             _isLogsPollInFlight = false;
+            Repaint();
+        }
+    }
+
+    /// <summary>
+    /// Polls scene-review payload for revision-gated confirmation UI.
+    /// </summary>
+    private async Task PollSceneReviewAsync()
+    {
+        if (_jobService == null || _isSceneReviewPollInFlight || !_jobService.HasJob || _jobService.IsInTerminalState)
+        {
+            return;
+        }
+
+        _isSceneReviewPollInFlight = true;
+
+        try
+        {
+            SceneReviewResponse review = await _jobService.PollSceneReviewAsync();
+            ApplySceneReviewResponse(review);
+        }
+        catch (Exception ex)
+        {
+            HandlePollingFailure("Scene review polling failed", ex);
+        }
+        finally
+        {
+            _isSceneReviewPollInFlight = false;
+            Repaint();
+        }
+    }
+
+    private async Task SubmitSceneReviewDecisionAsync(bool confirmed, string feedback)
+    {
+        if (_jobService == null || _isSceneDecisionInFlight || !_hasSceneReviewRevision)
+        {
+            return;
+        }
+
+        _isSceneDecisionInFlight = true;
+        _sceneReviewMessage = string.Empty;
+
+        try
+        {
+            int revision = _sceneReviewRevision;
+            SceneReviewDecisionResponse response = await _jobService.SubmitSceneReviewDecisionAsync(revision, confirmed, feedback);
+            _sceneReviewState = response.ReviewState;
+            _sceneReviewMessage = string.IsNullOrWhiteSpace(response.Message)
+                ? "Scene review decision accepted."
+                : response.Message;
+
+            if (confirmed)
+            {
+                _sceneConfirmedForCurrentJob = true;
+                _sceneDecisionLocked = true;
+            }
+            else
+            {
+                _sceneDecisionAcceptedRevision = response.AcceptedRevision;
+                _sceneDecisionLocked = true;
+            }
+        }
+        catch (VivianApiException ex) when (ex.StatusCode == 409)
+        {
+            _sceneReviewMessage = "Scene review revision changed. Refreshing...";
+            if (_jobService.HasJob && !_jobService.IsInTerminalState)
+            {
+                try
+                {
+                    SceneReviewResponse latest = await _jobService.PollSceneReviewAsync();
+                    ApplySceneReviewResponse(latest);
+                }
+                catch (Exception refreshEx)
+                {
+                    _sceneReviewMessage = "Scene review refresh failed: " + refreshEx.Message;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _sceneReviewMessage = "Scene review submit failed: " + ex.Message;
+        }
+        finally
+        {
+            _isSceneDecisionInFlight = false;
             Repaint();
         }
     }
@@ -968,10 +1133,11 @@ public sealed class VivianBackendWindow : EditorWindow
             return;
         }
 
-        _statusMessage = "Job state: " + status.Status;
+        _statusMessage = GetPhaseDisplayText(status.Phase, _sceneReviewState);
         if (status.Status == JobStatus.CANCELLED)
         {
-            _statusMessage = "Job cancelled.";
+            _statusMessage = "Cancelled.";
+            CloseSceneReviewUi();
         }
 
         if (status.Status == JobStatus.FAILED && !string.IsNullOrWhiteSpace(status.Error))
@@ -1027,6 +1193,11 @@ public sealed class VivianBackendWindow : EditorWindow
             return status.Error;
         }
 
+        if (status != null)
+        {
+            return GetPhaseDisplayText(status.Phase, _sceneReviewState);
+        }
+
         return string.IsNullOrWhiteSpace(_statusMessage) ? "-" : _statusMessage;
     }
 
@@ -1037,16 +1208,55 @@ public sealed class VivianBackendWindow : EditorWindow
             return "-";
         }
 
-        switch (status.Status)
+        switch (status.Phase)
         {
-            case JobStatus.QUEUED:
+            case JobPhase.QUEUED:
                 return "0%";
-            case JobStatus.RUNNING:
-                return "50%";
-            case JobStatus.SUCCEEDED:
-            case JobStatus.FAILED:
-            case JobStatus.CANCELLED:
+            case JobPhase.PREPARING_INPUT:
+                return "15%";
+            case JobPhase.ANALYZING_SCENE:
+                return "35%";
+            case JobPhase.AWAITING_SCENE_CONFIRMATION:
+                return "55%";
+            case JobPhase.GENERATING_SPECS:
+                return "75%";
+            case JobPhase.VALIDATING_OUTPUT:
+                return "90%";
+            case JobPhase.COMPLETED:
+            case JobPhase.FAILED:
+            case JobPhase.CANCELLED:
                 return "100%";
+            default:
+                return "-";
+        }
+    }
+
+    private static string GetPhaseDisplayText(JobPhase phase, SceneReviewState? reviewState)
+    {
+        switch (phase)
+        {
+            case JobPhase.QUEUED:
+                return "Queued...";
+            case JobPhase.PREPARING_INPUT:
+                return "Preparing input...";
+            case JobPhase.ANALYZING_SCENE:
+                return "Analyzing scene...";
+            case JobPhase.AWAITING_SCENE_CONFIRMATION:
+                if (reviewState == SceneReviewState.PROCESSING_FEEDBACK)
+                {
+                    return "Applying feedback...";
+                }
+                return "Awaiting scene confirmation...";
+            case JobPhase.GENERATING_SPECS:
+                return "Generating specification...";
+            case JobPhase.VALIDATING_OUTPUT:
+                return "Validating output...";
+            case JobPhase.COMPLETED:
+                return "Completed.";
+            case JobPhase.FAILED:
+                return "Failed.";
+            case JobPhase.CANCELLED:
+                return "Cancelled.";
             default:
                 return "-";
         }
@@ -1153,125 +1363,90 @@ public sealed class VivianBackendWindow : EditorWindow
     private void ResetSceneConfirmationForNewGeneration()
     {
         _sceneSummaryText = string.Empty;
-        _sceneSummaryLastWrite = DateTime.MinValue;
-        _sceneFeedbackText = string.Empty;
+        _sceneReviewState = null;
+        _hasSceneReviewPayload = false;
+        _sceneReviewRevision = 0;
+        _hasSceneReviewRevision = false;
+        _sceneReviewUpdatedAt = null;
+        _sceneDecisionLocked = false;
+        _sceneDecisionAcceptedRevision = 0;
+        _sceneConfirmedForCurrentJob = false;
+        _sceneReviewMessage = string.Empty;
+        _isSceneDecisionInFlight = false;
+        _isSceneReviewPollInFlight = false;
         _chatMessages.Clear();
         _userChatInput = string.Empty;
         _chatScroll = Vector2.zero;
     }
 
     /// <summary>
-    /// Reloads summary file when it changes on disk.
+    /// Applies latest scene-review payload to local UI state.
     /// </summary>
-    private void UpdateSceneSummaryIfNeeded()
+    private void ApplySceneReviewResponse(SceneReviewResponse response)
     {
-        string summaryPath = GetSceneSummaryPath();
-        if (string.IsNullOrEmpty(summaryPath) || !File.Exists(summaryPath))
+        if (response == null)
         {
             return;
         }
 
-        DateTime lastWrite = File.GetLastWriteTimeUtc(summaryPath);
-        if (lastWrite <= _sceneSummaryLastWrite)
+        _sceneReviewState = response.ReviewState;
+        if (!string.IsNullOrWhiteSpace(response.Error))
         {
+            _sceneReviewMessage = response.Error;
+        }
+
+        if (response.SceneReview == null)
+        {
+            _hasSceneReviewPayload = false;
+            _hasSceneReviewRevision = false;
+            _sceneSummaryText = string.Empty;
+            _sceneReviewUpdatedAt = null;
             return;
         }
 
-        try
-        {
-            _sceneSummaryText = File.ReadAllText(summaryPath);
-            _sceneSummaryLastWrite = lastWrite;
-            Repaint();
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning("Failed to read scene summary: " + ex.Message);
-        }
-    }
+        _hasSceneReviewPayload = true;
+        _sceneSummaryText = response.SceneReview.Summary ?? string.Empty;
+        _sceneReviewUpdatedAt = response.SceneReview.UpdatedAt;
 
-    private string GetSceneSummaryPath()
-    {
-        if (string.IsNullOrEmpty(_groupPath))
-        {
-            return string.Empty;
-        }
-        return Path.Combine(_groupPath, "scene_understanding_summary.txt");
-    }
+        int nextRevision = response.SceneReview.Revision;
+        bool isRevisionIncremented = _hasSceneReviewRevision && nextRevision > _sceneReviewRevision;
+        _sceneReviewRevision = nextRevision;
+        _hasSceneReviewRevision = true;
 
-    private string GetSceneFeedbackPath()
-    {
-        if (string.IsNullOrEmpty(_groupPath))
+        if (_sceneDecisionLocked &&
+            !_sceneConfirmedForCurrentJob &&
+            _sceneReviewState == SceneReviewState.PENDING &&
+            nextRevision > _sceneDecisionAcceptedRevision)
         {
-            return string.Empty;
-        }
-        return Path.Combine(_groupPath, "scene_feedback.json");
-    }
-
-    /// <summary>
-    /// Writes scene feedback JSON for the backend process.
-    /// </summary>
-    private void WriteSceneFeedback(bool confirmed)
-    {
-        string feedbackPath = GetSceneFeedbackPath();
-        if (string.IsNullOrEmpty(feedbackPath))
-        {
-            Debug.LogWarning("Scene feedback path is not available yet.");
-            return;
+            _sceneDecisionLocked = false;
+            _sceneReviewMessage = "Updated review revision received.";
         }
 
-        string feedback = string.IsNullOrWhiteSpace(_sceneFeedbackText) ? string.Empty : _sceneFeedbackText.Trim();
-
-        try
+        if (isRevisionIncremented && string.IsNullOrWhiteSpace(_sceneReviewMessage))
         {
-            string tempPath = feedbackPath + ".tmp";
-            string json = BuildSceneFeedbackJson(confirmed, feedback);
-            var utf8NoBom = new System.Text.UTF8Encoding(false);
-            // Write-then-move avoids partially written feedback files.
-            File.WriteAllText(tempPath, json, utf8NoBom);
-            if (File.Exists(feedbackPath))
-            {
-                File.Delete(feedbackPath);
-            }
-            File.Move(tempPath, feedbackPath);
-            Debug.Log("Wrote scene feedback: " + feedbackPath);
-            if (confirmed)
-            {
-                _sceneFeedbackText = string.Empty;
-            }
+            _sceneReviewMessage = "Scene review updated to revision " + nextRevision + ".";
         }
-        catch (Exception ex)
+
+        if (response.Status == JobStatus.CANCELLED || response.Phase == JobPhase.CANCELLED)
         {
-            Debug.LogError("Failed to write scene feedback: " + ex.Message);
+            CloseSceneReviewUi();
         }
     }
 
-    /// <summary>
-    /// Minimal JSON payload expected by the backend scene confirmation step.
-    /// </summary>
-    private static string BuildSceneFeedbackJson(bool confirmed, string feedback)
+    private void CloseSceneReviewUi()
     {
-        string confirmedText = confirmed ? "true" : "false";
-        if (string.IsNullOrEmpty(feedback))
-        {
-            return "{\n  \"confirmed\": " + confirmedText + "\n}";
-        }
-
-        return "{\n  \"confirmed\": " + confirmedText + ",\n  \"feedback\": \"" + EscapeJsonString(feedback) + "\"\n}";
-    }
-
-    private static string EscapeJsonString(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        return value
-            .Replace("\\", "\\\\")
-            .Replace("\"", "\\\"")
-            .Replace("\r", "\\r")
-            .Replace("\n", "\\n")
-            .Replace("\t", "\\t");
+        _sceneSummaryText = string.Empty;
+        _sceneReviewState = null;
+        _hasSceneReviewPayload = false;
+        _sceneReviewRevision = 0;
+        _hasSceneReviewRevision = false;
+        _sceneReviewUpdatedAt = null;
+        _sceneDecisionLocked = false;
+        _sceneDecisionAcceptedRevision = 0;
+        _sceneConfirmedForCurrentJob = false;
+        _sceneReviewMessage = string.Empty;
+        _chatMessages.Clear();
+        _userChatInput = string.Empty;
     }
 
     /// <summary>

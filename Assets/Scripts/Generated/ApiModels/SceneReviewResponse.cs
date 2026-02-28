@@ -8,7 +8,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 namespace Vivian.Backend.Dtos
 {
-    public class JobStatusResponse
+    public class SceneReviewResponse
     {
         [JsonProperty("job_id")]
         public string JobId { get; set; } = default!;
@@ -18,6 +18,12 @@ namespace Vivian.Backend.Dtos
 
         [JsonProperty("phase")]
         public JobPhase Phase { get; set; }
+
+        [JsonProperty("review_state")]
+        public SceneReviewState? ReviewState { get; set; }
+
+        [JsonProperty("scene_review")]
+        public SceneReviewPayload? SceneReview { get; set; }
 
         [JsonProperty("error")]
         public string? Error { get; set; }

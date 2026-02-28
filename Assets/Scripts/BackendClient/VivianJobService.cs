@@ -28,6 +28,7 @@ namespace Vivian.Backend.Client
         public string CurrentJobId { get; private set; } = string.Empty;
         public JobStatusResponse LastKnownStatus { get; private set; }
         public JobResultResponse LastResult { get; private set; }
+        public SceneReviewResponse LastSceneReview { get; private set; }
         public bool IsCancelPending { get; private set; }
         public int NextLogOffset => _nextLogOffset;
         public bool HasJob => !string.IsNullOrEmpty(CurrentJobId);
@@ -62,6 +63,7 @@ namespace Vivian.Backend.Client
             _resultFetched = false;
             _lastResultJson = string.Empty;
             LastResult = null;
+            LastSceneReview = null;
             IsCancelPending = false;
             _logBuffer.Clear();
             LogsCleared?.Invoke();
@@ -70,6 +72,7 @@ namespace Vivian.Backend.Client
             {
                 JobId = response.JobId,
                 Status = response.Status,
+                Phase = JobPhase.QUEUED,
                 Error = null
             };
 
@@ -108,12 +111,68 @@ namespace Vivian.Backend.Client
                 {
                     JobId = logsResponse.JobId,
                     Status = logsResponse.Status,
+                    Phase = LastKnownStatus != null ? LastKnownStatus.Phase : JobPhase.QUEUED,
                     Error = LastKnownStatus != null ? LastKnownStatus.Error : null
                 };
                 SetLastStatus(statusFromLogs, true);
             }
 
             return logsResponse;
+        }
+
+        public async Task<SceneReviewResponse> PollSceneReviewAsync(CancellationToken cancellationToken = default)
+        {
+            EnsureHasJob();
+            SceneReviewResponse review = await _apiClient.GetSceneReviewAsync(CurrentJobId, cancellationToken);
+            LastSceneReview = review;
+
+            var statusFromReview = new JobStatusResponse
+            {
+                JobId = review.JobId,
+                Status = review.Status,
+                Phase = review.Phase,
+                Error = review.Error
+            };
+            SetLastStatus(statusFromReview, true);
+            return review;
+        }
+
+        public async Task<SceneReviewDecisionResponse> SubmitSceneReviewDecisionAsync(
+            int revision,
+            bool confirmed,
+            string feedback,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureHasJob();
+            if (revision <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(revision), "Revision must be greater than zero.");
+            }
+
+            string normalizedFeedback = string.IsNullOrWhiteSpace(feedback) ? string.Empty : feedback.Trim();
+            if (!confirmed && normalizedFeedback.Length == 0)
+            {
+                throw new ArgumentException("Feedback is required when confirmation is false.", nameof(feedback));
+            }
+
+            var request = new SceneReviewDecisionRequest
+            {
+                Revision = revision,
+                Confirmed = confirmed,
+                Feedback = confirmed ? null : normalizedFeedback
+            };
+
+            SceneReviewDecisionResponse response = await _apiClient.SubmitSceneReviewDecisionAsync(CurrentJobId, request, cancellationToken);
+            var statusFromDecision = new JobStatusResponse
+            {
+                JobId = response.JobId,
+                Status = response.Status,
+                Phase = response.Phase,
+                Error = LastKnownStatus != null ? LastKnownStatus.Error : null
+            };
+            SetLastStatus(statusFromDecision, true);
+
+            return response;
         }
 
         public async Task<JobResultResponse> FetchResultAsync(CancellationToken cancellationToken = default)
@@ -171,6 +230,9 @@ namespace Vivian.Backend.Client
             {
                 JobId = response.JobId,
                 Status = response.Status,
+                Phase = response.Status == JobStatus.CANCELLED
+                    ? JobPhase.CANCELLED
+                    : (LastKnownStatus != null ? LastKnownStatus.Phase : JobPhase.QUEUED),
                 Error = LastKnownStatus != null ? LastKnownStatus.Error : null
             };
             SetLastStatus(status, true);
@@ -188,6 +250,7 @@ namespace Vivian.Backend.Client
             CurrentJobId = string.Empty;
             LastKnownStatus = null;
             LastResult = null;
+            LastSceneReview = null;
             IsCancelPending = false;
             _nextLogOffset = 0;
             _resultFetched = false;
@@ -252,6 +315,11 @@ namespace Vivian.Backend.Client
             }
 
             if (LastKnownStatus.Status != nextStatus.Status)
+            {
+                return true;
+            }
+
+            if (LastKnownStatus.Phase != nextStatus.Phase)
             {
                 return true;
             }
