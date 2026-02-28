@@ -19,7 +19,7 @@ public sealed class VivianBackendWindow : EditorWindow
     private const string ServerUrlEditorPrefKey = "VivianBackend.ServerUrl";
     private const string DefaultServerUrl = "http://127.0.0.1:8000";
 
-    private const double StatusPollIntervalSeconds = 0.35d;
+    private const double StatusPollIntervalSeconds = 0.5;
     private const double LogsPollIntervalSeconds = 0.75d;
 
     private VivianApiClient _apiClient;
