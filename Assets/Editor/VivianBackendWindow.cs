@@ -498,10 +498,6 @@ public sealed class VivianBackendWindow : EditorWindow
             EditorGUILayout.HelpBox(_lastError, MessageType.Error);
         }
 
-        if (status != null && status.Status == JobStatus.FAILED && !string.IsNullOrWhiteSpace(status.Error))
-        {
-            EditorGUILayout.HelpBox("Job failed: " + status.Error, MessageType.Error);
-        }
     }
 
     /// <summary>
@@ -517,6 +513,14 @@ public sealed class VivianBackendWindow : EditorWindow
             _jobService.ClearLogs();
         }
         EditorGUILayout.EndHorizontal();
+
+        JobStatusResponse currentStatus = _jobService?.LastKnownStatus;
+        if (currentStatus?.Phase == JobPhase.VALIDATING_OUTPUT)
+        {
+            EditorGUILayout.HelpBox(
+                "The validator is running in the background. Live logs are not available during this phase.",
+                MessageType.Info);
+        }
 
         if (_scrollLogsToEnd)
         {
@@ -1142,7 +1146,7 @@ public sealed class VivianBackendWindow : EditorWindow
 
         if (status.Status == JobStatus.FAILED && !string.IsNullOrWhiteSpace(status.Error))
         {
-            _lastError = "Job failed: " + status.Error;
+            _lastError = "Job failed: " + ShortError(status.Error);
         }
 
         Repaint();
@@ -1164,7 +1168,7 @@ public sealed class VivianBackendWindow : EditorWindow
     private void OnServiceFailed(JobStatusResponse failedStatus)
     {
         string details = failedStatus != null && !string.IsNullOrWhiteSpace(failedStatus.Error)
-            ? failedStatus.Error
+            ? ShortError(failedStatus.Error)
             : "Unknown error.";
         _lastError = "Job failed: " + details;
         Repaint();
@@ -1201,6 +1205,17 @@ public sealed class VivianBackendWindow : EditorWindow
         return string.IsNullOrWhiteSpace(_statusMessage) ? "-" : _statusMessage;
     }
 
+    private static string ShortError(string error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return error;
+        }
+        int tracebackIndex = error.IndexOf("\nTraceback ", System.StringComparison.Ordinal);
+        string trimmed = tracebackIndex >= 0 ? error.Substring(0, tracebackIndex) : error;
+        return trimmed.Split('\n')[0].Trim();
+    }
+
     private static string GetProgressText(JobStatusResponse status)
     {
         if (status == null)
@@ -1210,24 +1225,17 @@ public sealed class VivianBackendWindow : EditorWindow
 
         switch (status.Phase)
         {
-            case JobPhase.QUEUED:
-                return "0%";
-            case JobPhase.PREPARING_INPUT:
-                return "15%";
-            case JobPhase.ANALYZING_SCENE:
-                return "35%";
-            case JobPhase.AWAITING_SCENE_CONFIRMATION:
-                return "55%";
-            case JobPhase.GENERATING_SPECS:
-                return "75%";
-            case JobPhase.VALIDATING_OUTPUT:
-                return "90%";
+            case JobPhase.QUEUED:                    return "1/8";
+            case JobPhase.PREPARING_INPUT:           return "2/8";
+            case JobPhase.ANALYZING_SCENE:           return "3/8";
+            case JobPhase.AWAITING_SCENE_CONFIRMATION: return "4/8";
+            case JobPhase.GENERATING_SPECS:          return "5/8";
+            case JobPhase.VALIDATING_OUTPUT:         return "6/8";
+            case JobPhase.PUBLISHING:                return "7/8";
             case JobPhase.COMPLETED:
             case JobPhase.FAILED:
-            case JobPhase.CANCELLED:
-                return "100%";
-            default:
-                return "-";
+            case JobPhase.CANCELLED:                 return "8/8";
+            default:                                 return "-";
         }
     }
 
