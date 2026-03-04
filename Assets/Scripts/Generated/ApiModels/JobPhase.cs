@@ -17,6 +17,7 @@ namespace Vivian.Backend.Dtos
         AWAITING_SCENE_CONFIRMATION,
         GENERATING_SPECS,
         VALIDATING_OUTPUT,
+        PUBLISHING,
         COMPLETED,
         FAILED,
         CANCELLED,

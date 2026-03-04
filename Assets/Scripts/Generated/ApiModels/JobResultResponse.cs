@@ -16,6 +16,12 @@ namespace Vivian.Backend.Dtos
         [JsonProperty("status")]
         public JobStatus Status { get; set; }
 
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("successful_attempt")]
+        public int? SuccessfulAttempt { get; set; }
+
         [JsonProperty("output_path")]
         public string? OutputPath { get; set; }
 
