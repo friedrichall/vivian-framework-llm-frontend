@@ -21,5 +21,11 @@ namespace Vivian.Backend.Dtos
 
         [JsonProperty("use_mock_scene_analysis")]
         public bool? UseMockSceneAnalysis { get; set; }
+
+        [JsonProperty("interaction_description")]
+        public string? InteractionDescription { get; set; }
+
+        [JsonProperty("skip_scene_confirmation")]
+        public bool? SkipSceneConfirmation { get; set; }
     }
 }

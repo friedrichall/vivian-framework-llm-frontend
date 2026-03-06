@@ -224,7 +224,17 @@ namespace Vivian.Backend.Client
             }
 
             IsCancelPending = true;
-            CancelJobResponse response = await _apiClient.CancelJobAsync(CurrentJobId, cancellationToken);
+
+            CancelJobResponse response;
+            try
+            {
+                response = await _apiClient.CancelJobAsync(CurrentJobId, cancellationToken);
+            }
+            catch
+            {
+                IsCancelPending = false;
+                throw;
+            }
 
             var status = new JobStatusResponse
             {

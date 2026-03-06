@@ -39,6 +39,7 @@ public sealed class VivianBackendWindow : EditorWindow
     private bool _showChildObjects;
     private string _groupName = string.Empty;
     private string _interactionDescription = string.Empty;
+    private bool _skipSceneConfirmation;
     private string _groupPath = string.Empty;
 
     private enum ChatRole
@@ -286,6 +287,7 @@ public sealed class VivianBackendWindow : EditorWindow
         _onlySceneAnalysis = EditorGUILayout.ToggleLeft("Only Scene Analysis", _onlySceneAnalysis);
         _useMockSceneAnalysis = EditorGUILayout.ToggleLeft("Use Mock Scene Analysis", _useMockSceneAnalysis);
         EditorGUI.EndDisabledGroup();
+        _skipSceneConfirmation = EditorGUILayout.ToggleLeft("Skip Scene Confirmation", _skipSceneConfirmation);
     }
 
     /// <summary>
@@ -515,7 +517,8 @@ public sealed class VivianBackendWindow : EditorWindow
         EditorGUILayout.EndHorizontal();
 
         JobStatusResponse currentStatus = _jobService?.LastKnownStatus;
-        if (currentStatus?.Phase == JobPhase.VALIDATING_OUTPUT)
+        if (currentStatus?.Phase == JobPhase.VALIDATING_OUTPUT
+            || currentStatus?.Phase == JobPhase.REVIEWING_CONSISTENCY)
         {
             EditorGUILayout.HelpBox(
                 "The validator is running in the background. Live logs are not available during this phase.",
@@ -574,7 +577,9 @@ public sealed class VivianBackendWindow : EditorWindow
             GroupPath = _groupPath,
             StartPipeline = _startPipeline,
             OnlySceneAnalysis = _onlySceneAnalysis,
-            UseMockSceneAnalysis = _useMockSceneAnalysis
+            UseMockSceneAnalysis = _useMockSceneAnalysis,
+            InteractionDescription = string.IsNullOrWhiteSpace(_interactionDescription) ? null : _interactionDescription,
+            SkipSceneConfirmation = _skipSceneConfirmation
         };
     }
 
@@ -1225,16 +1230,24 @@ public sealed class VivianBackendWindow : EditorWindow
 
         switch (status.Phase)
         {
-            case JobPhase.QUEUED:                    return "1/8";
-            case JobPhase.PREPARING_INPUT:           return "2/8";
-            case JobPhase.ANALYZING_SCENE:           return "3/8";
-            case JobPhase.AWAITING_SCENE_CONFIRMATION: return "4/8";
-            case JobPhase.GENERATING_SPECS:          return "5/8";
-            case JobPhase.VALIDATING_OUTPUT:         return "6/8";
-            case JobPhase.PUBLISHING:                return "7/8";
+            case JobPhase.QUEUED:                                return "1/16";
+            case JobPhase.PREPARING_INPUT:                       return "2/16";
+            case JobPhase.ANALYZING_SCENE:                       return "3/16";
+            case JobPhase.AWAITING_SCENE_CONFIRMATION:           return "4/16";
+            case JobPhase.PLANNING_INTERACTIONS:                 return "5/16";
+            case JobPhase.GENERATING_SPECS_INTERACTION_ELEMENTS: return "6/16";
+            case JobPhase.GENERATING_SPECS_VISUALIZATION_ELEMENTS: return "7/16";
+            case JobPhase.GENERATING_SPECS_STATES:               return "8/16";
+            case JobPhase.GENERATING_SPECS_TRANSITIONS:          return "9/16";
+            case JobPhase.GENERATING_SPECS:                      return "10/16";
+            case JobPhase.REVIEWING_CONSISTENCY:                 return "11/16";
+            case JobPhase.GENERATING_FIX_PLAN:                   return "12/16";
+            case JobPhase.DETERMINING_RETRY_SCOPE:               return "13/16";
+            case JobPhase.VALIDATING_OUTPUT:                     return "14/16";
+            case JobPhase.PUBLISHING:                            return "15/16";
             case JobPhase.COMPLETED:
             case JobPhase.FAILED:
-            case JobPhase.CANCELLED:                 return "8/8";
+            case JobPhase.CANCELLED:                             return "16/16";
             default:                                 return "-";
         }
     }
@@ -1255,8 +1268,24 @@ public sealed class VivianBackendWindow : EditorWindow
                     return "Applying feedback...";
                 }
                 return "Awaiting scene confirmation...";
+            case JobPhase.PLANNING_INTERACTIONS:
+                return "Planning interactions...";
+            case JobPhase.GENERATING_SPECS_INTERACTION_ELEMENTS:
+                return "Generating interaction elements...";
+            case JobPhase.GENERATING_SPECS_VISUALIZATION_ELEMENTS:
+                return "Generating visualization elements...";
+            case JobPhase.GENERATING_SPECS_STATES:
+                return "Generating states...";
+            case JobPhase.GENERATING_SPECS_TRANSITIONS:
+                return "Generating transitions...";
             case JobPhase.GENERATING_SPECS:
                 return "Generating specification...";
+            case JobPhase.REVIEWING_CONSISTENCY:
+                return "Reviewing consistency...";
+            case JobPhase.GENERATING_FIX_PLAN:
+                return "Generating fix plan...";
+            case JobPhase.DETERMINING_RETRY_SCOPE:
+                return "Determining retry scope...";
             case JobPhase.VALIDATING_OUTPUT:
                 return "Validating output...";
             case JobPhase.COMPLETED:
