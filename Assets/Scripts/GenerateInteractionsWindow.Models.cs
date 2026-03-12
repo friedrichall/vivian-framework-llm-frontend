@@ -137,7 +137,6 @@ public partial class GenerateInteractionsWindow
     private class InteractionParams
     {
         public string type;
-        public string axis;
         public float range;
     }
 

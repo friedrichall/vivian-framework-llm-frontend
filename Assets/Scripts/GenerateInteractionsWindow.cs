@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -11,10 +12,18 @@ using Debug = UnityEngine.Debug;
 
 public partial class GenerateInteractionsWindow : EditorWindow
 {
-    [MenuItem("Assets/Generate Interactions")]
+    public struct GeneratedPaths
+    {
+        public string GroupPath;
+        public string SceneJsonPath;
+        public string ViewsManifestPath;
+        public string SceneDir;
+    }
+
+    [MenuItem("Assets/Generate Interactions", false, 2000)]
     public static void ShowWindow()
     {
-        GetWindow<GenerateInteractionsWindow>(true, "generate interactions");
+        Debug.LogWarning("Generate Interactions window has been merged into Vivian Backend. Open 'Vivian/Backend Job Window'.");
     }
 
     private enum Step
@@ -80,15 +89,125 @@ public partial class GenerateInteractionsWindow : EditorWindow
     };
     private static readonly Regex SafeNameRegex = new Regex("[^A-Za-z0-9_-]", RegexOptions.Compiled);
 
+    public static bool TryBuildGeneratedPaths(string groupName, out GeneratedPaths paths)
+    {
+        paths = default;
+        string trimmedGroup = string.IsNullOrWhiteSpace(groupName) ? string.Empty : groupName.Trim();
+        if (string.IsNullOrEmpty(trimmedGroup))
+        {
+            return false;
+        }
+
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        string basePath = Path.Combine(projectRoot, "Packages", "vivian-example-prototypes", "Resources");
+        string groupPath = Path.Combine(basePath, trimmedGroup);
+
+        paths = new GeneratedPaths
+        {
+            GroupPath = groupPath,
+            SceneJsonPath = Path.Combine(groupPath, "scene.json"),
+            ViewsManifestPath = Path.Combine(groupPath, "views_manifest.json"),
+            SceneDir = groupPath
+        };
+
+        return true;
+    }
+
+    public static bool TryGenerateInteractionAssets(
+        IReadOnlyList<GameObject> selectedObjects,
+        string groupName,
+        string interactionDescription,
+        bool startPipeline,
+        bool onlySceneAnalysis,
+        bool useMockSceneAnalysis,
+        out GeneratedPaths paths,
+        out string error)
+    {
+        paths = default;
+        error = string.Empty;
+
+        if (!TryBuildGeneratedPaths(groupName, out GeneratedPaths predictedPaths))
+        {
+            error = "Group name is required.";
+            return false;
+        }
+
+        if (selectedObjects == null || selectedObjects.Count == 0)
+        {
+            error = "At least one GameObject must be selected.";
+            return false;
+        }
+
+        var validSelection = new List<GameObject>();
+        for (int i = 0; i < selectedObjects.Count; i++)
+        {
+            if (selectedObjects[i] != null)
+            {
+                validSelection.Add(selectedObjects[i]);
+            }
+        }
+
+        if (validSelection.Count == 0)
+        {
+            error = "Selected GameObjects are no longer valid.";
+            return false;
+        }
+
+        var worker = CreateInstance<GenerateInteractionsWindow>();
+        try
+        {
+            worker._groupName = groupName.Trim();
+            worker._interactionDescription = interactionDescription ?? string.Empty;
+            worker._startVivianPipeline = startPipeline;
+            worker._onlySceneAnalysis = onlySceneAnalysis;
+            worker._useMockSceneAnalysis = useMockSceneAnalysis;
+
+            worker._selection.Clear();
+            worker._selectedObjects.Clear();
+
+            foreach (GameObject go in validSelection)
+            {
+                worker._selection[go] = true;
+                worker._selectedObjects.Add(go);
+            }
+
+            worker.CreateInteractionObjects();
+
+            paths = predictedPaths;
+            if (!File.Exists(paths.SceneJsonPath))
+            {
+                error = "scene.json was not generated at: " + paths.SceneJsonPath;
+                return false;
+            }
+
+            if (!File.Exists(paths.ViewsManifestPath))
+            {
+                error = "views_manifest.json was not generated at: " + paths.ViewsManifestPath;
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            DestroyImmediate(worker);
+        }
+    }
+
     private void OnGUI()
     {
-        if (_currentStep == Step.SelectObjects)
+        EditorGUILayout.HelpBox(
+            "This window has been merged into Vivian Backend.\nOpen 'Vivian/Backend Job Window' to run the full workflow.",
+            MessageType.Info);
+
+        if (GUILayout.Button("Open Vivian Backend Window"))
         {
-            DrawSelectionStep();
-        }
-        else if (_currentStep == Step.DefineInteractionElements)
-        {
-            DrawInteractionElementsStep();
+            EditorApplication.ExecuteMenuItem("Vivian/Backend Job Window");
         }
     }
 
