@@ -589,46 +589,28 @@ public partial class GenerateInteractionsWindow
 
         if (isSlider)
         {
-            string axis = null;
             float range = 0f;
 
             if (TryGetLocalBounds(go, out Bounds bounds))
             {
-                Vector3 scaledSize = Vector3.Scale(bounds.size, AbsVector3(go.transform.lossyScale));
-                axis = AxisFromSize(scaledSize);
-                range = RangeFromSize(scaledSize, axis);
-            }
-
-            if (string.IsNullOrEmpty(axis))
-            {
-                axis = "x";
+                Vector3 s = Vector3.Scale(bounds.size, AbsVector3(go.transform.lossyScale));
+                range = Mathf.Max(Mathf.Max(s.x, s.y), s.z);
             }
 
             return new InteractionParams
             {
                 type = "Slider",
-                axis = axis,
                 range = range
             };
         }
 
         string rotType = isDoor ? "Door" : "Rotatable";
-        string rotAxis = null;
         float rotRange = 0f;
 
         var hinge = go.GetComponent<HingeJoint>();
-        if (hinge != null)
+        if (hinge != null && hinge.useLimits)
         {
-            rotAxis = AxisFromVector(hinge.axis);
-            if (hinge.useLimits)
-            {
-                rotRange = Mathf.Abs(hinge.limits.max - hinge.limits.min);
-            }
-        }
-
-        if (string.IsNullOrEmpty(rotAxis))
-        {
-            rotAxis = AxisFromBounds(go);
+            rotRange = Mathf.Abs(hinge.limits.max - hinge.limits.min);
         }
 
         if (rotRange <= 0f)
@@ -639,57 +621,8 @@ public partial class GenerateInteractionsWindow
         return new InteractionParams
         {
             type = rotType,
-            axis = rotAxis,
             range = rotRange
         };
-    }
-
-    private string AxisFromBounds(GameObject go)
-    {
-        if (TryGetLocalBounds(go, out Bounds bounds))
-        {
-            Vector3 scaledSize = Vector3.Scale(bounds.size, AbsVector3(go.transform.lossyScale));
-            return AxisFromSize(scaledSize);
-        }
-
-        return "y";
-    }
-
-    private static string AxisFromVector(Vector3 axis)
-    {
-        float ax = Mathf.Abs(axis.x);
-        float ay = Mathf.Abs(axis.y);
-        float az = Mathf.Abs(axis.z);
-
-        if (ax >= ay && ax >= az) return "x";
-        if (ay >= az) return "y";
-        return "z";
-    }
-
-    private static string AxisFromSize(Vector3 size)
-    {
-        float ax = Mathf.Abs(size.x);
-        float ay = Mathf.Abs(size.y);
-        float az = Mathf.Abs(size.z);
-
-        if (ax >= ay && ax >= az) return "x";
-        if (ay >= az) return "y";
-        return "z";
-    }
-
-    private static float RangeFromSize(Vector3 size, string axis)
-    {
-        switch (axis)
-        {
-            case "x":
-                return Mathf.Abs(size.x);
-            case "y":
-                return Mathf.Abs(size.y);
-            case "z":
-                return Mathf.Abs(size.z);
-            default:
-                return 0f;
-        }
     }
 
     private static bool ContainsAny(string value, params string[] tokens)
