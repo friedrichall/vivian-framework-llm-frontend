@@ -19,6 +19,9 @@ namespace Vivian.Backend.Dtos
         [JsonProperty("scene_understanding")]
         public Dictionary<string, JToken> SceneUnderstanding { get; set; } = default!;
 
+        [JsonProperty("interaction_plan")]
+        public Dictionary<string, JToken>? InteractionPlan { get; set; }
+
         [JsonProperty("updated_at")]
         public DateTimeOffset UpdatedAt { get; set; }
     }
