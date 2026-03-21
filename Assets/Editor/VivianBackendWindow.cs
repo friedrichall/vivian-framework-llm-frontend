@@ -4,11 +4,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Vivian.Backend.Client;
 using Vivian.Backend.Dtos;
+using Vivian.Editor.Models;
 
 /// <summary>
 /// Unified editor window for the Vivian backend workflow.
@@ -40,7 +42,6 @@ public sealed class VivianBackendWindow : EditorWindow
     private bool _showChildObjects;
     private string _groupName = string.Empty;
     private string _interactionDescription = string.Empty;
-    private bool _skipSceneConfirmation;
     private string _groupPath = string.Empty;
     private string _screensDir = string.Empty;
 
@@ -69,6 +70,14 @@ public sealed class VivianBackendWindow : EditorWindow
     private int _sceneDecisionAcceptedRevision;
     private bool _sceneConfirmedForCurrentJob;
     private string _sceneReviewMessage = string.Empty;
+
+    private InteractionPlanData _interactionPlanData;
+    private bool _foldInteractionElements;
+    private bool _foldVisualizationElements;
+    private bool _foldStates;
+    private bool _foldTransitions;
+    private bool _foldChatHistory;
+    private bool _foldReasoning;
 
     private string _statusMessage = "Idle";
     private string _lastError = string.Empty;
@@ -289,8 +298,6 @@ public sealed class VivianBackendWindow : EditorWindow
         _onlySceneAnalysis = EditorGUILayout.ToggleLeft("Only Scene Analysis", _onlySceneAnalysis);
         _useMockSceneAnalysis = EditorGUILayout.ToggleLeft("Use Mock Scene Analysis", _useMockSceneAnalysis);
         EditorGUI.EndDisabledGroup();
-        _skipSceneConfirmation = EditorGUILayout.ToggleLeft("Skip Scene Confirmation", _skipSceneConfirmation);
-
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Screens Directory", EditorStyles.boldLabel);
         EditorGUILayout.BeginHorizontal();
@@ -371,7 +378,7 @@ public sealed class VivianBackendWindow : EditorWindow
     /// </summary>
     private void DrawSceneConfirmationSection()
     {
-        EditorGUILayout.LabelField("Scene Confirmation Chat", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("Interaction Plan Review", EditorStyles.boldLabel);
 
         JobStatusResponse status = _jobService != null ? _jobService.LastKnownStatus : null;
         bool hasJob = _jobService != null && _jobService.HasJob;
@@ -416,37 +423,30 @@ public sealed class VivianBackendWindow : EditorWindow
             return;
         }
 
-        string summaryText = string.IsNullOrWhiteSpace(_sceneSummaryText) ? "(empty summary)" : _sceneSummaryText;
-        var bubbleStyle = new GUIStyle(EditorStyles.helpBox)
-        {
-            wordWrap = true,
-            padding = new RectOffset(10, 10, 8, 8)
-        };
-        float maxBubbleWidth = Mathf.Max(200f, EditorGUIUtility.currentViewWidth * 0.62f);
+        _chatScroll = EditorGUILayout.BeginScrollView(_chatScroll, GUILayout.MinHeight(220), GUILayout.MaxHeight(500));
 
-        _chatScroll = EditorGUILayout.BeginScrollView(_chatScroll, GUILayout.Height(220));
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("Scene understanding summary:\n" + summaryText, bubbleStyle, GUILayout.MaxWidth(maxBubbleWidth));
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
-        EditorGUILayout.Space(4);
-
-        foreach (ChatMessage message in _chatMessages)
+        if (_interactionPlanData != null)
         {
-            bool isUser = message.Role == ChatRole.User;
+            DrawInteractionPlanFoldouts();
+        }
+        else
+        {
+            string summaryText = string.IsNullOrWhiteSpace(_sceneSummaryText) ? "(empty summary)" : _sceneSummaryText;
+            var bubbleStyle = new GUIStyle(EditorStyles.helpBox)
+            {
+                wordWrap = true,
+                padding = new RectOffset(10, 10, 8, 8)
+            };
+            float maxBubbleWidth = Mathf.Max(200f, EditorGUIUtility.currentViewWidth * 0.62f);
             EditorGUILayout.BeginHorizontal();
-            if (isUser)
-            {
-                GUILayout.FlexibleSpace();
-            }
-            EditorGUILayout.LabelField(message.Text ?? string.Empty, bubbleStyle, GUILayout.MaxWidth(maxBubbleWidth));
-            if (!isUser)
-            {
-                GUILayout.FlexibleSpace();
-            }
+            EditorGUILayout.LabelField(summaryText, bubbleStyle, GUILayout.MaxWidth(maxBubbleWidth));
+            GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.Space(4);
         }
+
+        DrawChatHistoryFoldout();
+
         EditorGUILayout.EndScrollView();
 
         bool disableActions = _isSceneDecisionInFlight || _sceneDecisionLocked || _sceneConfirmedForCurrentJob;
@@ -488,6 +488,139 @@ public sealed class VivianBackendWindow : EditorWindow
         if (_sceneConfirmedForCurrentJob)
         {
             EditorGUILayout.HelpBox("Scene confirmation submitted. Waiting for backend pipeline to continue.", MessageType.Info);
+        }
+    }
+
+    private void DrawInteractionPlanFoldouts()
+    {
+        var interactionElements = new List<ElementRoleData>();
+        var visualizationElements = new List<ElementRoleData>();
+        foreach (var role in _interactionPlanData.ElementRoles)
+        {
+            if (role.Category == "visualization")
+                visualizationElements.Add(role);
+            else
+                interactionElements.Add(role);
+        }
+
+        DrawElementRolesFoldout(ref _foldInteractionElements, "Interaction Elements", interactionElements);
+        DrawElementRolesFoldout(ref _foldVisualizationElements, "Visualization Elements", visualizationElements);
+        DrawPlannedStatesFoldout();
+        DrawPlannedTransitionsFoldout();
+        DrawReasoningFoldout();
+    }
+
+    private void DrawElementRolesFoldout(ref bool foldout, string title, List<ElementRoleData> elements)
+    {
+        foldout = EditorGUILayout.Foldout(foldout, title + " (" + elements.Count + ")", true);
+        if (!foldout) return;
+
+        EditorGUI.indentLevel++;
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Object Name", EditorStyles.boldLabel, GUILayout.Width(180));
+        EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(120));
+        EditorGUILayout.LabelField("Rationale", EditorStyles.boldLabel);
+        EditorGUILayout.EndHorizontal();
+
+        foreach (var elem in elements)
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(elem.ObjectName, GUILayout.Width(180));
+            EditorGUILayout.LabelField(elem.FuncSpecType, GUILayout.Width(120));
+            EditorGUILayout.LabelField(elem.Rationale);
+            EditorGUILayout.EndHorizontal();
+        }
+        EditorGUI.indentLevel--;
+    }
+
+    private void DrawPlannedStatesFoldout()
+    {
+        int count = _interactionPlanData.PlannedStates.Count;
+        _foldStates = EditorGUILayout.Foldout(_foldStates, "States (" + count + ")", true);
+        if (!_foldStates) return;
+
+        EditorGUI.indentLevel++;
+        foreach (var state in _interactionPlanData.PlannedStates)
+        {
+            EditorGUILayout.LabelField(state.Name, EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(state.Description, EditorStyles.wordWrappedLabel);
+            if (state.InvolvedElements != null && state.InvolvedElements.Count > 0)
+            {
+                EditorGUILayout.LabelField("Elements: " + string.Join(", ", state.InvolvedElements));
+            }
+            if (state.ScreenFiles != null && state.ScreenFiles.Count > 0)
+            {
+                EditorGUILayout.LabelField("Screens: " + string.Join(", ", state.ScreenFiles));
+            }
+            EditorGUILayout.Space(2);
+        }
+        EditorGUI.indentLevel--;
+    }
+
+    private void DrawPlannedTransitionsFoldout()
+    {
+        int count = _interactionPlanData.PlannedTransitions.Count;
+        _foldTransitions = EditorGUILayout.Foldout(_foldTransitions, "Transitions (" + count + ")", true);
+        if (!_foldTransitions) return;
+
+        EditorGUI.indentLevel++;
+        foreach (var tr in _interactionPlanData.PlannedTransitions)
+        {
+            string trigger = string.IsNullOrEmpty(tr.TriggerElement) ? "auto" : tr.TriggerElement;
+            EditorGUILayout.LabelField(tr.SourceState + "  ->  " + tr.DestinationState);
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField("Trigger: " + trigger + " (" + tr.TriggerDescription + ")");
+            if (tr.GuardHints != null && tr.GuardHints.Count > 0)
+            {
+                EditorGUILayout.LabelField("Guards: " + string.Join("; ", tr.GuardHints));
+            }
+            EditorGUI.indentLevel--;
+            EditorGUILayout.Space(2);
+        }
+        EditorGUI.indentLevel--;
+    }
+
+    private void DrawReasoningFoldout()
+    {
+        if (string.IsNullOrWhiteSpace(_interactionPlanData.Reasoning)) return;
+
+        _foldReasoning = EditorGUILayout.Foldout(_foldReasoning, "Reasoning", true);
+        if (!_foldReasoning) return;
+
+        EditorGUI.indentLevel++;
+        EditorGUILayout.LabelField(_interactionPlanData.Reasoning, EditorStyles.wordWrappedLabel);
+        EditorGUI.indentLevel--;
+    }
+
+    private void DrawChatHistoryFoldout()
+    {
+        if (_chatMessages.Count == 0) return;
+
+        _foldChatHistory = EditorGUILayout.Foldout(_foldChatHistory, "Chat History (" + _chatMessages.Count + ")", true);
+        if (!_foldChatHistory) return;
+
+        var bubbleStyle = new GUIStyle(EditorStyles.helpBox)
+        {
+            wordWrap = true,
+            padding = new RectOffset(10, 10, 8, 8)
+        };
+        float maxBubbleWidth = Mathf.Max(200f, EditorGUIUtility.currentViewWidth * 0.62f);
+
+        foreach (ChatMessage message in _chatMessages)
+        {
+            bool isUser = message.Role == ChatRole.User;
+            EditorGUILayout.BeginHorizontal();
+            if (isUser)
+            {
+                GUILayout.FlexibleSpace();
+            }
+            EditorGUILayout.LabelField(message.Text ?? string.Empty, bubbleStyle, GUILayout.MaxWidth(maxBubbleWidth));
+            if (!isUser)
+            {
+                GUILayout.FlexibleSpace();
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(4);
         }
     }
 
@@ -595,7 +728,6 @@ public sealed class VivianBackendWindow : EditorWindow
             OnlySceneAnalysis = _onlySceneAnalysis,
             UseMockSceneAnalysis = _useMockSceneAnalysis,
             InteractionDescription = string.IsNullOrWhiteSpace(_interactionDescription) ? null : _interactionDescription,
-            SkipSceneConfirmation = _skipSceneConfirmation,
             ScreensDir = string.IsNullOrWhiteSpace(_screensDir) ? null : _screensDir
         };
     }
@@ -1454,6 +1586,13 @@ public sealed class VivianBackendWindow : EditorWindow
         _chatMessages.Clear();
         _userChatInput = string.Empty;
         _chatScroll = Vector2.zero;
+        _interactionPlanData = null;
+        _foldInteractionElements = false;
+        _foldVisualizationElements = false;
+        _foldStates = false;
+        _foldTransitions = false;
+        _foldChatHistory = false;
+        _foldReasoning = false;
     }
 
     /// <summary>
@@ -1484,6 +1623,22 @@ public sealed class VivianBackendWindow : EditorWindow
         _hasSceneReviewPayload = true;
         _sceneSummaryText = response.SceneReview.Summary ?? string.Empty;
         _sceneReviewUpdatedAt = response.SceneReview.UpdatedAt;
+
+        _interactionPlanData = null;
+        if (response.SceneReview.InteractionPlan != null)
+        {
+            try
+            {
+                var jObj = new JObject();
+                foreach (var kvp in response.SceneReview.InteractionPlan)
+                    jObj[kvp.Key] = kvp.Value;
+                _interactionPlanData = jObj.ToObject<InteractionPlanData>();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("Failed to parse interaction plan: " + ex.Message);
+            }
+        }
 
         int nextRevision = response.SceneReview.Revision;
         bool isRevisionIncremented = _hasSceneReviewRevision && nextRevision > _sceneReviewRevision;
@@ -1524,6 +1679,13 @@ public sealed class VivianBackendWindow : EditorWindow
         _sceneReviewMessage = string.Empty;
         _chatMessages.Clear();
         _userChatInput = string.Empty;
+        _interactionPlanData = null;
+        _foldInteractionElements = false;
+        _foldVisualizationElements = false;
+        _foldStates = false;
+        _foldTransitions = false;
+        _foldChatHistory = false;
+        _foldReasoning = false;
     }
 
     /// <summary>
