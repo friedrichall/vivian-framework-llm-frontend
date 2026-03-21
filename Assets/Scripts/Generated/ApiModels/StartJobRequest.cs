@@ -27,5 +27,8 @@ namespace Vivian.Backend.Dtos
 
         [JsonProperty("skip_scene_confirmation")]
         public bool? SkipSceneConfirmation { get; set; }
+
+        [JsonProperty("screens_dir")]
+        public string? ScreensDir { get; set; }
     }
 }

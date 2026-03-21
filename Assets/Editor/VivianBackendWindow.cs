@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEditor;
@@ -41,6 +42,7 @@ public sealed class VivianBackendWindow : EditorWindow
     private string _interactionDescription = string.Empty;
     private bool _skipSceneConfirmation;
     private string _groupPath = string.Empty;
+    private string _screensDir = string.Empty;
 
     private enum ChatRole
     {
@@ -288,6 +290,20 @@ public sealed class VivianBackendWindow : EditorWindow
         _useMockSceneAnalysis = EditorGUILayout.ToggleLeft("Use Mock Scene Analysis", _useMockSceneAnalysis);
         EditorGUI.EndDisabledGroup();
         _skipSceneConfirmation = EditorGUILayout.ToggleLeft("Skip Scene Confirmation", _skipSceneConfirmation);
+
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("Screens Directory", EditorStyles.boldLabel);
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField(string.IsNullOrEmpty(_screensDir) ? "(none)" : _screensDir, EditorStyles.wordWrappedLabel);
+        if (GUILayout.Button("Browse…", GUILayout.Width(70)))
+        {
+            string picked = EditorUtility.OpenFolderPanel("Select Screens Directory", _screensDir, "");
+            if (!string.IsNullOrEmpty(picked))
+                _screensDir = picked;
+        }
+        if (!string.IsNullOrEmpty(_screensDir) && GUILayout.Button("Clear", GUILayout.Width(50)))
+            _screensDir = string.Empty;
+        EditorGUILayout.EndHorizontal();
     }
 
     /// <summary>
@@ -579,7 +595,8 @@ public sealed class VivianBackendWindow : EditorWindow
             OnlySceneAnalysis = _onlySceneAnalysis,
             UseMockSceneAnalysis = _useMockSceneAnalysis,
             InteractionDescription = string.IsNullOrWhiteSpace(_interactionDescription) ? null : _interactionDescription,
-            SkipSceneConfirmation = _skipSceneConfirmation
+            SkipSceneConfirmation = _skipSceneConfirmation,
+            ScreensDir = string.IsNullOrWhiteSpace(_screensDir) ? null : _screensDir
         };
     }
 
@@ -640,6 +657,13 @@ public sealed class VivianBackendWindow : EditorWindow
 
             ApplyGeneratedPaths(generatedPaths);
             ResetSceneConfirmationForNewGeneration();
+
+            if (!string.IsNullOrWhiteSpace(_screensDir))
+            {
+                _statusMessage = "Copying screens...";
+                CopyScreensToGroupDir(_screensDir, _groupPath);
+                AssetDatabase.Refresh();
+            }
 
             // Ensure no stale state from a previous job leaks into this run.
             StopPolling();
@@ -1392,6 +1416,22 @@ public sealed class VivianBackendWindow : EditorWindow
         _sceneJsonPath = paths.SceneJsonPath ?? string.Empty;
         _viewsManifestPath = paths.ViewsManifestPath ?? string.Empty;
         _sceneDir = paths.SceneDir ?? string.Empty;
+    }
+
+    private static void CopyScreensToGroupDir(string sourceDir, string groupPath)
+    {
+        string targetDir = Path.Combine(groupPath, "screens");
+        Directory.CreateDirectory(targetDir);
+        foreach (string file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            string relative = file.Substring(sourceDir.Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string dest = Path.Combine(targetDir, relative);
+            string destDir = Path.GetDirectoryName(dest);
+            if (!string.IsNullOrEmpty(destDir))
+                Directory.CreateDirectory(destDir);
+            File.Copy(file, dest, overwrite: true);
+        }
     }
 
     /// <summary>
