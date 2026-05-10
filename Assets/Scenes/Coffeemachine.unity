@@ -122,6 +122,74 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1001 &530265095
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 770774713105414007, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_Name
+      value: CoffeeMachine2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4389055102281221476, guid: 60c87615c8b9d7f468a12eacca961fe1,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 60c87615c8b9d7f468a12eacca961fe1, type: 3}
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -308,78 +376,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
---- !u!1001 &1129209670
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 5300966873903620042, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_Name
-      value: toaster3
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0.1586
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9208604022975868377, guid: 817e5023ccc082d43bb85cb98dd103c6,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects:
-    - {fileID: 3895282540476818233, guid: 817e5023ccc082d43bb85cb98dd103c6, type: 3}
-    - {fileID: 7963580634338352195, guid: 817e5023ccc082d43bb85cb98dd103c6, type: 3}
-    - {fileID: 1447265019865219715, guid: 817e5023ccc082d43bb85cb98dd103c6, type: 3}
-    - {fileID: 1411339809896056837, guid: 817e5023ccc082d43bb85cb98dd103c6, type: 3}
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 817e5023ccc082d43bb85cb98dd103c6, type: 3}
 --- !u!850595691 &1230206277
 LightingSettings:
   m_ObjectHideFlags: 0
@@ -455,7 +451,7 @@ PrefabInstance:
     - target: {fileID: 2419487880734766392, guid: b04ae4acb7b42354086e362634de3028,
         type: 3}
       propertyPath: BundleURL
-      value: SpecGenToaster22
+      value: SpecGenTestVivian
       objectReference: {fileID: 0}
     - target: {fileID: 2419487880734766392, guid: b04ae4acb7b42354086e362634de3028,
         type: 3}
@@ -687,4 +683,4 @@ SceneRoots:
   - {fileID: 1237035853}
   - {fileID: 6285379926956382706}
   - {fileID: 6004702207211461641}
-  - {fileID: 1129209670}
+  - {fileID: 530265095}
