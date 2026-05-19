@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Vivian.Backend.Dtos;
@@ -10,6 +11,23 @@ using Vivian.Editor.Models;
 
 public sealed partial class VivianBackendWindow
 {
+    /// <summary>
+    /// Renders a labelled read-only path that wraps to the next line instead of
+    /// getting clipped at the panel edge. Replaces single-line read-only
+    /// TextField usage for long path strings.
+    /// </summary>
+    private static void DrawWrappedReadonlyField(string label, string value)
+    {
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField(label, GUILayout.Width(150));
+        EditorGUILayout.SelectableLabel(
+            string.IsNullOrEmpty(value) ? "(empty)" : value,
+            EditorStyles.wordWrappedLabel,
+            GUILayout.ExpandHeight(true),
+            GUILayout.MinHeight(EditorGUIUtility.singleLineHeight));
+        EditorGUILayout.EndHorizontal();
+    }
+
     private string GetStatusMessage(JobStatusResponse status)
     {
         if (!string.IsNullOrWhiteSpace(_lastError))

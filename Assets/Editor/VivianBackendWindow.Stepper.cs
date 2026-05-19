@@ -429,10 +429,15 @@ public sealed partial class VivianBackendWindow
         Vector2 idSize = idStyle.CalcSize(idContent);
         GUI.Label(new Rect(x, midY + 2, idSize.x + 4, 16), idContent, idStyle);
 
-        // Buttons on the right side
+        // Buttons on the right side. The "Start" button alone dispatches to the
+        // single-run or batch path based on the _batchModeEnabled checkbox in
+        // the Batch Evaluation foldout — there is no second activation toggle.
         float buttonWidth = 60;
         float buttonSpacing = 4;
-        float totalButtonsWidth = buttonWidth * 3 + buttonSpacing * 2 + 8;
+        float startButtonWidth = _batchModeEnabled ? 110 : buttonWidth;
+        float totalButtonsWidth = startButtonWidth + buttonSpacing
+                                  + buttonWidth + buttonSpacing
+                                  + buttonWidth + 8;
         float buttonX = barRect.xMax - totalButtonsWidth;
         float buttonY = barRect.y + (barRect.height - 20) * 0.5f;
 
@@ -441,19 +446,29 @@ public sealed partial class VivianBackendWindow
                         !_isFetchingResult &&
                         !_jobService.IsJobActive &&
                         !_jobService.IsCancelPending &&
+                        !_isBatchRunning &&
                         IsStartRequestValid();
 
         bool canCancel = !_isCancellingJob &&
-                         _jobService.HasJob &&
-                         !_jobService.IsInTerminalState;
+                         ((_jobService.HasJob && !_jobService.IsInTerminalState) || _isBatchRunning);
 
         EditorGUI.BeginDisabledGroup(!canStart);
-        if (GUI.Button(new Rect(buttonX, buttonY, buttonWidth, 20), _isStartingJob ? "Starting..." : "Start"))
+        string startLabel = _isStartingJob
+            ? "Starting..."
+            : (_batchModeEnabled ? $"Start Batch ({_batchRunCount})" : "Start");
+        if (GUI.Button(new Rect(buttonX, buttonY, startButtonWidth, 20), startLabel))
         {
-            StartJobAsync();
+            if (_batchModeEnabled)
+            {
+                StartBatchAsync();
+            }
+            else
+            {
+                StartJobAsync();
+            }
         }
         EditorGUI.EndDisabledGroup();
-        buttonX += buttonWidth + buttonSpacing;
+        buttonX += startButtonWidth + buttonSpacing;
 
         EditorGUI.BeginDisabledGroup(!canCancel);
         if (GUI.Button(new Rect(buttonX, buttonY, buttonWidth, 20), _isCancellingJob ? "Cancelling..." : "Cancel"))

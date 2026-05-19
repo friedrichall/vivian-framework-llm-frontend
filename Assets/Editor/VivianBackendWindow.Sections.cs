@@ -13,6 +13,13 @@ public sealed partial class VivianBackendWindow
     private bool _foldInteractionSetup = true;
     private bool _foldLogs;
     private bool _foldResult;
+    private bool _foldBatchSettings;
+
+    // Batch evaluation state
+    private bool _batchModeEnabled;
+    private int _batchRunCount = 20;
+    private bool _batchAutoConfirmScene = true;
+    private string _batchIdOverride = string.Empty;
 
     /// <summary>
     /// Consolidated advanced settings: server URL, pipeline options, auto-filled paths.
@@ -57,19 +64,49 @@ public sealed partial class VivianBackendWindow
 
         EditorGUILayout.Space(2);
 
-        // Auto-filled paths
+        // Auto-filled paths (word-wrapped read-only display so long paths
+        // don't disappear behind the panel edge).
         EditorGUILayout.LabelField("Auto-Filled Paths", EditorStyles.boldLabel);
-        EditorGUI.BeginDisabledGroup(true);
-        EditorGUILayout.TextField("group_path", _groupPath);
-        EditorGUILayout.TextField("scene.json", _sceneJsonPath);
-        EditorGUILayout.TextField("views_manifest.json", _viewsManifestPath);
-        EditorGUILayout.TextField("scene dir", _sceneDir);
-        EditorGUI.EndDisabledGroup();
+        DrawWrappedReadonlyField("group_path", _groupPath);
+        DrawWrappedReadonlyField("scene.json", _sceneJsonPath);
+        DrawWrappedReadonlyField("views_manifest.json", _viewsManifestPath);
+        DrawWrappedReadonlyField("scene dir", _sceneDir);
 
         if (string.IsNullOrWhiteSpace(_groupName))
         {
             EditorGUILayout.HelpBox("Enter a group name to generate group_path.", MessageType.Info);
         }
+
+        EditorGUI.indentLevel--;
+        DrawSectionSeparator();
+    }
+
+    /// <summary>
+    /// Batch evaluation settings: enable batch mode, configure run count and auto-confirm,
+    /// optional batch-id override. The actual start trigger lives on the Start button
+    /// (see Stepper) which dispatches to StartBatchAsync when batch mode is active.
+    /// </summary>
+    private void DrawBatchSettingsSection()
+    {
+        _foldBatchSettings = EditorGUILayout.Foldout(_foldBatchSettings, "Batch Evaluation", true);
+        if (!_foldBatchSettings) return;
+
+        EditorGUI.indentLevel++;
+
+        _batchModeEnabled = EditorGUILayout.ToggleLeft("Enable batch mode", _batchModeEnabled);
+
+        EditorGUI.BeginDisabledGroup(!_batchModeEnabled);
+        _batchRunCount = Mathf.Max(1, EditorGUILayout.IntField("Run count (default 20)", _batchRunCount));
+        _batchAutoConfirmScene = EditorGUILayout.ToggleLeft("Auto-confirm scene review", _batchAutoConfirmScene);
+        _batchIdOverride = EditorGUILayout.TextField("Batch ID (optional)", _batchIdOverride);
+        EditorGUILayout.HelpBox(
+            "Runs the same job sequentially N times. Batch ID auto-generated as " +
+            "'batch-<GroupName>-<datetime>'. Outputs land in " +
+            "Packages/vivian-example-prototypes/Resources/_batchmode/<batchId>/ " +
+            "(with scene_input/ containing scene.json, views_manifest.json, the 3D scene " +
+            "prefab, views/ and screens/). Pipeline logs in logs/orchestrator/batch-runs/<batchId>/.",
+            MessageType.Info);
+        EditorGUI.EndDisabledGroup();
 
         EditorGUI.indentLevel--;
         DrawSectionSeparator();
@@ -163,7 +200,8 @@ public sealed partial class VivianBackendWindow
         }
 
         EditorGUILayout.LabelField("Interaction Description");
-        _interactionDescription = EditorGUILayout.TextArea(_interactionDescription, GUILayout.MinHeight(60));
+        GUIStyle wrappedTextArea = new GUIStyle(EditorStyles.textArea) { wordWrap = true };
+        _interactionDescription = EditorGUILayout.TextArea(_interactionDescription, wrappedTextArea, GUILayout.MinHeight(60));
 
         EditorGUILayout.Space(2);
         EditorGUILayout.LabelField("Screens Directory", EditorStyles.miniLabel);

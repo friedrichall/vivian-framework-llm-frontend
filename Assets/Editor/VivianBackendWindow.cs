@@ -136,6 +136,10 @@ public sealed partial class VivianBackendWindow : EditorWindow
 
     private void OnDisable()
     {
+        if (_isBatchRunning)
+        {
+            _batchCancelRequested = true;
+        }
         StopPolling();
         UnsubscribeFromServiceEvents();
 
@@ -170,6 +174,7 @@ public sealed partial class VivianBackendWindow : EditorWindow
 
         EditorGUILayout.Space(2);
         DrawAdvancedSettingsSection();
+        DrawBatchSettingsSection();
         DrawScopeSelectionFoldout();
         DrawInteractionSetupFoldout();
         DrawSceneConfirmationSection();

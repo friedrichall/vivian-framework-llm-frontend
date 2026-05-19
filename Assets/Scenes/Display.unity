@@ -660,7 +660,7 @@ PrefabInstance:
     - target: {fileID: 2419487880734766392, guid: b04ae4acb7b42354086e362634de3028,
         type: 3}
       propertyPath: BundleURL
-      value: SpecGenDisplay
+      value: TestmitLisa
       objectReference: {fileID: 0}
     - target: {fileID: 2419487880734766392, guid: b04ae4acb7b42354086e362634de3028,
         type: 3}
@@ -840,7 +840,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 14396b49b9a7dfd4395c03e68fb34ade, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1201,7 +1201,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 8657145205701946452, guid: 0fd6e663a5cb2624e97bfd6ee62a6b88, type: 3}
+  - {fileID: 2100000, guid: 187e68218e5da9740b1e07c197427dbb, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

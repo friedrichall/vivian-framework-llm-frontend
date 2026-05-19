@@ -32,7 +32,8 @@ public sealed partial class VivianBackendWindow
             OnlySceneAnalysis = _onlySceneAnalysis,
             UseMockSceneAnalysis = _useMockSceneAnalysis,
             InteractionDescription = string.IsNullOrWhiteSpace(_interactionDescription) ? null : _interactionDescription,
-            ScreensDir = string.IsNullOrWhiteSpace(_screensDir) ? null : _screensDir
+            ScreensDir = string.IsNullOrWhiteSpace(_screensDir) ? null : _screensDir,
+            AutoConfirmScene = false
         };
     }
 
@@ -129,6 +130,14 @@ public sealed partial class VivianBackendWindow
     /// </summary>
     private async void CancelJobAsync()
     {
+        // Batch mode: signal the batch loop to stop after the current run is cancelled.
+        if (_isBatchRunning)
+        {
+            _batchCancelRequested = true;
+            _statusMessage = "Batch cancel requested.";
+            Repaint();
+        }
+
         if (_isCancellingJob || _jobService == null || !_jobService.HasJob || _jobService.IsInTerminalState)
         {
             return;

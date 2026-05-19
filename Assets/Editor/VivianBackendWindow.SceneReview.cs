@@ -174,7 +174,7 @@ public sealed partial class VivianBackendWindow
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField(elem.ObjectName, GUILayout.Width(180));
             EditorGUILayout.LabelField(elem.FuncSpecType, GUILayout.Width(120));
-            EditorGUILayout.LabelField(elem.Rationale);
+            EditorGUILayout.LabelField(elem.Rationale, EditorStyles.wordWrappedLabel, GUILayout.ExpandWidth(true));
             EditorGUILayout.EndHorizontal();
         }
         EditorGUI.indentLevel--;
@@ -193,11 +193,11 @@ public sealed partial class VivianBackendWindow
             EditorGUILayout.LabelField(state.Description, EditorStyles.wordWrappedLabel);
             if (state.InvolvedElements != null && state.InvolvedElements.Count > 0)
             {
-                EditorGUILayout.LabelField("Elements: " + string.Join(", ", state.InvolvedElements));
+                EditorGUILayout.LabelField("Elements: " + string.Join(", ", state.InvolvedElements), EditorStyles.wordWrappedLabel);
             }
             if (state.ScreenFiles != null && state.ScreenFiles.Count > 0)
             {
-                EditorGUILayout.LabelField("Screens: " + string.Join(", ", state.ScreenFiles));
+                EditorGUILayout.LabelField("Screens: " + string.Join(", ", state.ScreenFiles), EditorStyles.wordWrappedLabel);
             }
             EditorGUILayout.Space(2);
         }
@@ -214,12 +214,12 @@ public sealed partial class VivianBackendWindow
         foreach (var tr in _interactionPlanData.PlannedTransitions)
         {
             string trigger = string.IsNullOrEmpty(tr.TriggerElement) ? "auto" : tr.TriggerElement;
-            EditorGUILayout.LabelField(tr.SourceState + "  ->  " + tr.DestinationState);
+            EditorGUILayout.LabelField(tr.SourceState + "  ->  " + tr.DestinationState, EditorStyles.wordWrappedLabel);
             EditorGUI.indentLevel++;
-            EditorGUILayout.LabelField("Trigger: " + trigger + " (" + tr.TriggerDescription + ")");
+            EditorGUILayout.LabelField("Trigger: " + trigger + " (" + tr.TriggerDescription + ")", EditorStyles.wordWrappedLabel);
             if (tr.GuardHints != null && tr.GuardHints.Count > 0)
             {
-                EditorGUILayout.LabelField("Guards: " + string.Join("; ", tr.GuardHints));
+                EditorGUILayout.LabelField("Guards: " + string.Join("; ", tr.GuardHints), EditorStyles.wordWrappedLabel);
             }
             EditorGUI.indentLevel--;
             EditorGUILayout.Space(2);

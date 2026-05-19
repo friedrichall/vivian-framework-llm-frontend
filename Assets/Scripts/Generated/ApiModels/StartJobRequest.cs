@@ -27,5 +27,17 @@ namespace Vivian.Backend.Dtos
 
         [JsonProperty("screens_dir")]
         public string? ScreensDir { get; set; }
+
+        [JsonProperty("auto_confirm_scene")]
+        public bool? AutoConfirmScene { get; set; }
+
+        [JsonProperty("batch_id")]
+        public string? BatchId { get; set; }
+
+        [JsonProperty("batch_run_index")]
+        public int? BatchRunIndex { get; set; }
+
+        [JsonProperty("batch_total")]
+        public int? BatchTotal { get; set; }
     }
 }
