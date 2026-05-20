@@ -123,7 +123,17 @@ public sealed partial class VivianBackendWindow
 
     private StepState GetStepState(int groupIndex, JobPhase? currentPhase, JobStatus? status)
     {
-        if (!currentPhase.HasValue || !status.HasValue)
+        if (!status.HasValue)
+            return StepState.Pending;
+
+        // Terminal SUCCEEDED: the backend may report SUCCEEDED while the last
+        // known phase still trails behind (e.g. VALIDATING_OUTPUT or PUBLISHING)
+        // because the logs poll can update status without updating phase. The
+        // job is done, so every group must read as Completed regardless of phase.
+        if (status.Value == JobStatus.SUCCEEDED)
+            return StepState.Completed;
+
+        if (!currentPhase.HasValue)
             return StepState.Pending;
 
         if (status.Value == JobStatus.FAILED)
