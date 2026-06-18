@@ -660,7 +660,7 @@ PrefabInstance:
     - target: {fileID: 2419487880734766392, guid: b04ae4acb7b42354086e362634de3028,
         type: 3}
       propertyPath: BundleURL
-      value: Display-HITL
+      value: Display-End-to-End-2
       objectReference: {fileID: 0}
     - target: {fileID: 2419487880734766392, guid: b04ae4acb7b42354086e362634de3028,
         type: 3}
